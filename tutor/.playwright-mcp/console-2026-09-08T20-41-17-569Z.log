@@ -1,0 +1,12 @@
+[    6450ms] [WARNING] Devices Error (Permission Denied): NotAllowedError: Permission denied by system @ :3
+[   11615ms] [INFO] Waiting for ICE gathering to complete. Current state: new @ http://localhost:7860/client/assets/index-B-ber7RZ.js:0
+[   14654ms] [INFO] Ice gathering completed and connection is still checking. Trying to reconnect. @ http://localhost:7860/client/assets/index-B-ber7RZ.js:0
+[   14656ms] [INFO] All ICE candidates have been sent. @ http://localhost:7860/client/assets/index-B-ber7RZ.js:0
+[   34643ms] [INFO] Bot disconnected. Disconnecting client... @ http://localhost:7860/client/assets/index-B-ber7RZ.js:0
+[   90199ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:7860/start:0
+[   90199ms] [ERROR] [Pipecat Client] Error fetching: TypeError: Failed to fetch @ http://localhost:7860/client/assets/index-B-ber7RZ.js:0
+[   90199ms] [ERROR] Fatal error reported. Disconnecting... @ http://localhost:7860/client/assets/index-B-ber7RZ.js:0
+[   90199ms] [ERROR] Connection error: Ue: Failed to fetch
+    at Ct.startBot (http://localhost:7860/client/assets/index-B-ber7RZ.js:1:84519)
+    at async http://localhost:7860/client/assets/index-B-ber7RZ.js:90:76473
+    at async w (http://localhost:7860/client/assets/index-B-ber7RZ.js:90:77296) @ http://localhost:7860/client/assets/index-B-ber7RZ.js:89
