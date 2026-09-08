@@ -1,8 +1,4 @@
-# my-pipecat-app
-
-A minimal [Pipecat](https://github.com/pipecat-ai/pipecat) voice bot starter.
-
-## Quick start
+# Quick start
 
 ```bash
 # 1. Install the extras the dev runner + WebRTC + VAD need
