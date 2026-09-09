@@ -18,3 +18,12 @@ wheels/
 graphify-out
 logo
 .worktrees/
+plans
+
+# Avatar frontend build artifacts and deps
+frontend/node_modules/
+frontend/dist-overlay/
+CV/
+CV
+tutor/tutor/data/
+tutor/data/
