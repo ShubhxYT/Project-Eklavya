@@ -48,15 +48,23 @@ class GroqTutor:
             retries,
         )
 
-    async def answer(self, question: str, context: ContextPack, *, turn_id: str) -> TutorAnswer:
+    async def answer(
+        self,
+        question: str,
+        context: ContextPack,
+        *,
+        turn_id: str,
+        concise: bool = False,
+    ) -> TutorAnswer:
         if not context.sources:
             return TutorAnswer(CANONICAL_NOT_FOUND, unsupported=True)
+        word_limit = "40" if concise else "80"
         system = (
             "You answer using ONLY the SOURCE BLOCKS. Cite every factual claim by "
             "appending the exact bracketed source id at the end of the sentence.\n\n"
             "Example:\nSOURCE BLOCKS:\n[S1] ATP stores energy.\nQUESTION: What stores "
             "energy?\nANSWER: ATP stores energy in its phosphate bonds [S1].\n\n"
-            "Now answer the real question the same way. Use at most 80 words of plain "
+            f"Now answer the real question the same way. Use at most {word_limit} words of plain "
             "prose with no headings, lists, tables, or code fences. If the blocks cannot "
             "answer it, reply exactly NOT_FOUND."
         )

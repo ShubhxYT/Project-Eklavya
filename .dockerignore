@@ -1,8 +1,17 @@
-.git
-.gitignore
-.env
-.venv
-__pycache__
+# Keep the LXC image lean: only the bot runtime + frontend build assets.
+.venv/
+CV/
+.git/
+__pycache__/
 *.pyc
-build
-dist
+
+# tutor pipeline (not needed at bot runtime)
+tutor/
+
+# frontend source/build (ui/ carries the built prebuilt UI + overlay)
+frontend/
+
+# local files
+plans/
+.env
+*.local

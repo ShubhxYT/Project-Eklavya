@@ -44,7 +44,14 @@ class SpeechToText(Protocol):
 
 
 class TutorModel(Protocol):
-    async def answer(self, question: str, context: ContextPack, *, turn_id: str) -> TutorAnswer: ...
+    async def answer(
+        self,
+        question: str,
+        context: ContextPack,
+        *,
+        turn_id: str,
+        concise: bool = False,
+    ) -> TutorAnswer: ...
 
 
 class KnowledgeCatalog(Protocol):

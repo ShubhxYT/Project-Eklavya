@@ -35,10 +35,24 @@ from pipecat.frames.frames import (  # noqa: E402
     TextFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor  # noqa: E402
+from dataclasses import dataclass
 
 CANONICAL_NOT_FOUND = "Not found in the uploaded material."
 
 CITATION_RE = re.compile(r"\[S[0-9]+\]")
+
+
+@dataclass
+class BehaviorInterventionFrame(Frame):
+    """Explicit non-user behavior event that should be spoken immediately."""
+
+    reasons: tuple[str, ...]
+    scores: dict[str, float]
+
+
+@dataclass
+class BehaviorRecoveryFrame(Frame):
+    """Signals that concise mode may return to normal detail."""
 
 
 def citation_strip(text: str) -> str:
@@ -97,9 +111,24 @@ class GroundedTutorProcessor(FrameProcessor):
         self.catalog = catalog
         self.tutor = tutor
         self.course_id = course_id
+        self.concise_mode = False
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
+
+        if isinstance(frame, BehaviorInterventionFrame):
+            self.concise_mode = True
+            await self.push_frame(LLMFullResponseStartFrame(), direction)
+            await self.push_frame(
+                LLMTextFrame("You seem a little disengaged. Let’s make this short and precise."),
+                direction,
+            )
+            await self.push_frame(LLMFullResponseEndFrame(), direction)
+            return
+
+        if isinstance(frame, BehaviorRecoveryFrame):
+            self.concise_mode = False
+            return
 
         if not isinstance(frame, LLMContextFrame):
             # Forward everything we don't consume (StartFrame, audio, VAD, ...).
@@ -139,7 +168,9 @@ class GroundedTutorProcessor(FrameProcessor):
             return await self._chitchat(question)
 
         try:
-            raw = await self.tutor.answer(question, context, turn_id=question)
+            raw = await self.tutor.answer(
+                question, context, turn_id=question, concise=self.concise_mode
+            )
             if raw.unsupported:
                 # Material exists but cannot answer this question.
                 return await self._chitchat(question)
@@ -165,10 +196,14 @@ class GroundedTutorProcessor(FrameProcessor):
             caveat = "Although I couldn't verify that in your document, "
         else:
             caveat = "Although your document doesn't have that answer, "
+        length_instruction = (
+            "Keep the answer under 40 words. " if self.concise_mode else ""
+        )
         instruction = (
             "You are a helpful assistant in a voice conversation. "
             "Your responses are spoken aloud, so avoid emojis, bullet points, "
-            "or formatting that can't be spoken. Answer helpfully in plain "
+            "or formatting that can't be spoken. "
+            f"{length_instruction}Answer helpfully in plain "
             "conversational prose."
         )
         try:

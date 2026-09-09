@@ -16,6 +16,7 @@
 # `uv add "pipecat-ai[xxx]"` command), and replace the service constructors
 # below. Examples are in the comments.
 
+import asyncio
 import importlib.util
 import os
 import sys
@@ -23,11 +24,12 @@ from pathlib import Path
 
 import httpx
 from dotenv import load_dotenv
+from fastapi import WebSocket, WebSocketDisconnect
 from loguru import logger
 
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.evals.transport import EvalTransportParams
-from pipecat.frames.frames import LLMRunFrame
+from pipecat.frames.frames import InterruptionFrame, LLMRunFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker, ProcessorUnusablePolicy
 from pipecat.processors.aggregators.llm_context import LLMContext
@@ -48,11 +50,19 @@ from pipecat.transports.websocket.fastapi import (
 from pipecat.workers.runner import WorkerRunner
 from voicebox_tts import VoiceboxTTSService
 
-from grounded_tutor import GroundedTutorProcessor
+from grounded_tutor import (
+    BehaviorInterventionFrame,
+    BehaviorRecoveryFrame,
+    GroundedTutorProcessor,
+    latest_user_text,
+)
+from behavior_monitor import BehaviorIntervention, BehaviorMonitor
 from drona.knowledge.catalog import FileCatalog
 from drona.services.groq_tutor import GroqTutor
 
 load_dotenv(override=True)
+
+active_behavior_monitor: BehaviorMonitor | None = None
 
 # Transport parameter factories. The runner picks one based on how the bot is
 # started (defaults to "webrtc"). Swap in "daily", "twilio", etc. as needed.
@@ -70,6 +80,19 @@ transport_params = {
         audio_out_enabled=True,
     ),
 }
+
+
+def behavior_intervention_frames(event: BehaviorIntervention, context) -> list:
+    """Build the warning + concise replay sequence for one CV event."""
+    frames = [
+        InterruptionFrame(),
+        BehaviorInterventionFrame(event.reasons, event.scores),
+    ]
+    # Reuse the real latest user message. Never inject a synthetic user
+    # prompt, and do not run an empty conversation after the warning.
+    if latest_user_text(context):
+        frames.append(LLMRunFrame())
+    return frames
 
 # Daily is optional: register its transport params only if the SDK is installed.
 if importlib.util.find_spec("daily"):
@@ -173,13 +196,35 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
         processor_unusable_policy=ProcessorUnusablePolicy.END,
     )
 
+    intervention_lock = asyncio.Lock()
+
+    async def on_behavior_intervention(event: BehaviorIntervention) -> None:
+        # Keep one intervention in flight so a noisy camera cannot queue a
+        # second interruption behind an already-speaking intervention.
+        async with intervention_lock:
+            await worker.queue_frames(behavior_intervention_frames(event, context))
+
+    async def on_behavior_recovery() -> None:
+        await worker.queue_frames([BehaviorRecoveryFrame()])
+
+    behavior_monitor = BehaviorMonitor(
+        on_intervention=on_behavior_intervention,
+        on_recovery=on_behavior_recovery,
+    )
+
     runner = WorkerRunner(handle_sigint=runner_args.handle_sigint)
 
     await runner.add_workers(worker)
 
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
+        global active_behavior_monitor
         logger.info("Client connected")
+        active_behavior_monitor = behavior_monitor
+        if await behavior_monitor.start():
+            logger.info("CV monitor started; waiting for browser camera frames")
+        else:
+            logger.warning("CV camera monitor could not be started; voice chat continues")
         # Kick off the conversation.
         context.add_message(
             {"role": "system", "content": "Please introduce yourself to the user."}
@@ -188,10 +233,17 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
 
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):
+        global active_behavior_monitor
         logger.info("Client disconnected")
+        if active_behavior_monitor is behavior_monitor:
+            active_behavior_monitor = None
+        await behavior_monitor.stop()
         await runner.cancel()
 
-    await runner.run()
+    try:
+        await runner.run()
+    finally:
+        await behavior_monitor.stop()
 
 
 async def bot(runner_args: RunnerArguments):
@@ -243,6 +295,42 @@ from fastapi.staticfiles import StaticFiles
 from pipecat.runner.run import app
 
 app.mount("/client", StaticFiles(directory="ui", html=True), name="client")
+
+
+@app.websocket("/behavior/ws")
+async def behavior_websocket(websocket: WebSocket):
+    """Receive browser camera JPEGs for the active local bot session."""
+    monitor = active_behavior_monitor
+    if monitor is None:
+        await websocket.close(code=1013, reason="No active bot session")
+        return
+    await websocket.accept()
+    logger.info("Behavior camera stream connected")
+    last_sent_timestamp = None
+    try:
+        await monitor.set_streaming(True)
+        while True:
+            message = await websocket.receive()
+            if message.get("type") == "websocket.disconnect":
+                break
+            frame = message.get("bytes")
+            if frame:
+                await monitor.submit_frame(frame)
+                sample = getattr(monitor, "latest_sample", None)
+                if sample is not None and sample.timestamp != last_sent_timestamp:
+                    await websocket.send_json(
+                        {
+                            "type": "behavior",
+                            "timestamp": sample.timestamp,
+                            "engagement": sample.scores["engagement"],
+                        }
+                    )
+                    last_sent_timestamp = sample.timestamp
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await monitor.set_streaming(False)
+        logger.info("Behavior camera stream disconnected")
 
 
 def _load_twilio_ice_servers() -> None:

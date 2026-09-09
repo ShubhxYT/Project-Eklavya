@@ -42,6 +42,41 @@ GROQ_MODEL=openai/gpt-oss-120b
 
 Citations appear in the text transcript but are stripped from the spoken audio.
 
+## Local behavior-aware voice test
+
+The H5 engagement model runs in a separate Python 3.13 process while the voice
+bot remains on Python 3.14. Camera frames come from the browser, so no native
+OpenCV window is opened. This phase is local-host only; the Docker image does
+not start a camera process.
+
+Create the model environment once:
+
+```bash
+uv venv --python 3.13 CV/.venv-h5
+uv pip install --python CV/.venv-h5/bin/python -r CV/requirements-h5.txt
+```
+
+Start the bot normally with `uv run bot.py`, open the local client, and click
+Connect. In the Bot Video header, turn on the Camera toggle to grant permission
+and begin browser-frame sensing. The mirrored self-view appears in the panel's
+bottom-right corner; turning the toggle off stops the camera and behavior
+sensing immediately.
+Camera permission is available on `localhost` or HTTPS origins in Chrome.
+
+The first-test policy uses absolute thresholds: Engagement ≤40%, Boredom ≥60%,
+Confusion ≥65%, or Frustration ≥65%, after a smoothed breach lasting five
+seconds. A 60-second cooldown and five-point recovery hysteresis prevent
+repeated interruptions. Missing cameras, denied permission, disconnected
+streams, and no-face periods fail silently and leave voice chat running.
+
+Override local paths if needed:
+
+```dotenv
+CV_PYTHON=/absolute/path/to/CV/.venv-h5/bin/python
+CV_MODEL_PATH=/absolute/path/to/CV/daisee_engagement_model_final.h5
+CV_CAMERA_INDEX=0
+```
+
 
 ## What's in here
 

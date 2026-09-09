@@ -23,7 +23,9 @@ plans
 # Avatar frontend build artifacts and deps
 frontend/node_modules/
 frontend/dist-overlay/
-CV/
-CV
+CV/.venv-h5/
+CV/__pycache__/
+CV/model.onnx
+CV/emotion_cam.py
 tutor/tutor/data/
 tutor/data/
