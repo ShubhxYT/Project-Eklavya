@@ -1,0 +1,17 @@
+{
+  "name": "eklavya-frontend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:overlay": "vite build -c vite.overlay.config.ts && mkdir -p ../client/models && cp dist-overlay/avatar-overlay.js ../client/ && cp public/models/avatar.glb public/models/animations.glb ../client/models/",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.170.0",
+    "typescript": "^5.6.3",
+    "vite": "^6.0.3"
+  }
+}

@@ -1,0 +1,17 @@
+# Keep the image lean: bot runtime + built client + vision worker only.
+.venv/
+vision/.venv-h5/
+vision/__pycache__/
+.git/
+__pycache__/
+*.pyc
+
+# ingestion tooling and the corpus are not needed at bot runtime
+data/
+docs/
+tests/
+frontend/
+
+# local files
+.env
+*.local
