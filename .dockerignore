@@ -10,7 +10,19 @@ __pycache__/
 data/
 docs/
 tests/
-frontend/
+# frontend source is not needed; the checked-in learner build is.
+frontend/node_modules/
+frontend/learner/
+frontend/src/
+frontend/public/
+frontend/dist-overlay/
+frontend/README.md
+frontend/package.json
+frontend/package-lock.json
+frontend/tsconfig.json
+frontend/tsconfig.learner.json
+frontend/vite.learner.config.ts
+frontend/vitest.learner.config.ts
 
 # local files
 .env

@@ -6,7 +6,7 @@ Builds the React learner at `/learn/` and owns the shared lipsync engine.
   device controls, tests.
 - `src/lipsync.ts`, `src/visemes.ts`, `src/mathUtil.ts` — shared lipsync engine.
 - `public/models/` — `avatar.glb`, `animations.glb`.
-- Output: `../end-user-client/` (checked in; the Dockerfile requires it).
+- Output: `end-user-client/` inside `frontend/` (checked in; the Dockerfile requires it).
 
 ## Build and check
 
@@ -22,10 +22,10 @@ npm run build:learner
 ```
 
 The Vite root is `learner/`, base `/learn/`, public directory `public/`, and
-absolute output `../end-user-client/`. The learner build copies the models and
+absolute output `end-user-client/`. The learner build copies the models and
 favicon, then `learner/scripts/copy-assets.mjs` copies the DRACO decoder from
-the installed Three package into `../end-user-client/draco/`. There is no CDN
-or overlay-global dependency at runtime.
+the installed Three package into `end-user-client/draco/`. There is no CDN or
+overlay-global dependency at runtime.
 
 ## Runtime ownership
 

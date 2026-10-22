@@ -18,7 +18,7 @@ export default defineConfig({
     ),
   },
   build: {
-    outDir: resolve(here, "../end-user-client"),
+    outDir: resolve(here, "end-user-client"),
     emptyOutDir: true,
     sourcemap: false,
   },

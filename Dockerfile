@@ -28,12 +28,12 @@ COPY . .
 # Fail the image build if the separate learner delivery was not built first.
 # Keep CV layers and the legacy bot; public ASGI denies their routes.
 RUN test -f /app/end_user_app.py \
-    && test -f /app/end-user-client/index.html \
-    && test -f /app/end-user-client/models/avatar.glb \
-    && test -f /app/end-user-client/models/animations.glb \
-    && test -f /app/end-user-client/draco/draco_decoder.wasm \
-    && test -f /app/end-user-client/draco/draco_wasm_wrapper.js \
-    && test -f /app/end-user-client/draco/draco_decoder.js
+    && test -f /app/frontend/end-user-client/index.html \
+    && test -f /app/frontend/end-user-client/models/avatar.glb \
+    && test -f /app/frontend/end-user-client/models/animations.glb \
+    && test -f /app/frontend/end-user-client/draco/draco_decoder.wasm \
+    && test -f /app/frontend/end-user-client/draco/draco_wasm_wrapper.js \
+    && test -f /app/frontend/end-user-client/draco/draco_decoder.js
 RUN uv sync --frozen --no-dev
 
 EXPOSE 7861

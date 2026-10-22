@@ -59,7 +59,7 @@ def install_learner_routes(app, *, config):
 
 install_learner_routes(
     app,
-    config=Path(os.getenv("LEARNER_CLIENT_DIR", Path(__file__).parent / "end-user-client")),
+    config=Path(os.getenv("LEARNER_CLIENT_DIR", Path(__file__).parent / "frontend" / "end-user-client")),
 )
 
 
@@ -93,7 +93,7 @@ def main():
             raise ValueError()
         config = PublicConfig(
             origin=args.public_origin,
-            assets=Path(os.getenv("LEARNER_CLIENT_DIR", Path(__file__).parent / "end-user-client")),
+            assets=Path(os.getenv("LEARNER_CLIENT_DIR", Path(__file__).parent / "frontend" / "end-user-client")),
             ice_servers=args.ice_servers,
             enabled=os.getenv("EKLAVYA_PUBLIC_ENABLED", "1") == "1",
         )

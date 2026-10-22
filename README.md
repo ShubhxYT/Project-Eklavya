@@ -18,9 +18,9 @@ src/eklavya/
   telephony.py            outbound Twilio calls (eklavya-call)
   drona/                  retrieval, citations, Groq tutor client
   ingest/                 Docling ingestion CLI + optional Streamlit uploader
-frontend/learner/         React learner UI (builds to end-user-client/)
+frontend/learner/         React learner UI (builds to frontend/end-user-client/)
 frontend/src/             shared lipsync engine used by the learner
-end-user-client/          checked-in learner build served at /learn/
+frontend/end-user-client/ checked-in learner build served at /learn/
 vision/                   H5 engagement model + worker (own Python 3.13 venv)
 data/                     ingested course corpus (gitignored)
 docs/plans/               design and implementation notes (gitignored)
@@ -188,7 +188,7 @@ Provider keys stay in the backend environment, never JS, `VITE_*`, URLs or publi
 
 Do not publish the local runner command. Public delivery requires the approved lease-owned signaling adapter and passing attachment/security/browser acceptance in `docs/end-user-smoke-checks.md`.
 
-Build `end-user-client/` before `docker build`; the Dockerfile intentionally checks for its index, models and DRACO decoder. The default image command stays the developer command. Supply this learner command override through the deployment platform:
+Build `frontend/end-user-client/` before `docker build`; the Dockerfile intentionally checks for its index, models and DRACO decoder. The default image command stays the developer command. Supply this learner command override through the deployment platform:
 
 ```text
 uv run end_user_app.py -t webrtc --host 0.0.0.0 --port 7861 --public --public-origin https://YOUR_ACTUAL_HOST
