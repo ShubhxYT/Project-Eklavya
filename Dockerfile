@@ -26,7 +26,7 @@ RUN uv python install 3.13 \
 
 COPY . .
 # Fail the image build if the separate learner delivery was not built first.
-# Keep CV layers and the legacy bot/client; public ASGI denies their routes.
+# Keep CV layers and the legacy bot; public ASGI denies their routes.
 RUN test -f /app/end_user_app.py \
     && test -f /app/end-user-client/index.html \
     && test -f /app/end-user-client/models/avatar.glb \

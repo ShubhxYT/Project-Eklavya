@@ -3,7 +3,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build:overlay": "vite build -c vite.overlay.config.ts && mkdir -p ../client/models && cp dist-overlay/avatar-overlay.js ../client/ && cp public/models/avatar.glb public/models/animations.glb ../client/models/",
     "typecheck": "tsc --noEmit",
     "dev:learner": "vite -c vite.learner.config.ts",
     "build:learner": "vite build -c vite.learner.config.ts && node learner/scripts/copy-assets.mjs",

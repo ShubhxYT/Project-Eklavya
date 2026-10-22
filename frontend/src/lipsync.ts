@@ -53,7 +53,7 @@ interface Band {
 export class Lipsync {
   public features: Feature | null = null;
   public viseme: VISEMES = VISEMES.sil;
-  // public for overlay debugging (audio context state exposure)
+  // public for diagnostics (audio context state exposure)
   public audioContext: AudioContext;
   private analyser: AnalyserNode;
   private dataArray: Uint8Array<ArrayBuffer>;

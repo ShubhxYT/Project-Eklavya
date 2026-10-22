@@ -358,16 +358,9 @@ async def bot(
     )
 
 
-# Serve our own branded copy of the prebuilt client UI. Registered before
-# main(), so it shadows the stock mount from pipecat-ai-prebuilt.
-from fastapi.staticfiles import StaticFiles
+# The legacy branded client UI was removed. The learner UI is served by
+# end_user_app.py at /learn/; the behavior websocket remains backend-only.
 from pipecat.runner.run import app
-
-app.mount(
-    "/client",
-    StaticFiles(directory=os.getenv("CLIENT_DIR", str(REPO_ROOT / "client")), html=True),
-    name="client",
-)
 
 
 @app.websocket("/behavior/ws")

@@ -1,14 +1,15 @@
 # Project Eklavya
 
-A behavior-aware, file-grounded voice tutor. A Pipecat voice bot answers only
-from an ingested course corpus, speaks through a self-hosted voicebox TTS
-server, and can interrupt with concise recovery prompts when the browser
-camera's engagement model detects a struggling learner.
+A file-grounded voice tutor with a camera-free learner website. A Pipecat voice
+bot answers only from an ingested course corpus, speaks through a self-hosted
+voicebox TTS server, and streams real bot audio to a React learner UI. The
+optional behavior-sensing backend remains available to developer runs.
 
 ## Layout
 
 ```
-bot.py                    Pipecat dev-runner entrypoint (uv run bot.py)
+bot.py                    Pipecat dev-runner entrypoint (developer/telephony)
+end_user_app.py           learner entrypoint (local + public boundary)
 src/eklavya/
   app.py                  bot pipeline, transports, behavior websocket
   grounded_tutor.py       OKF-grounded Pipecat LLM processor
@@ -17,12 +18,13 @@ src/eklavya/
   telephony.py            outbound Twilio calls (eklavya-call)
   drona/                  retrieval, citations, Groq tutor client
   ingest/                 Docling ingestion CLI + optional Streamlit uploader
-client/                   built Pipecat UI served at /client (checked in)
-frontend/                 avatar-overlay source, builds into client/
+frontend/learner/         React learner UI (builds to end-user-client/)
+frontend/src/             shared lipsync engine used by the learner
+end-user-client/          checked-in learner build served at /learn/
 vision/                   H5 engagement model + worker (own Python 3.13 venv)
 data/                     ingested course corpus (gitignored)
-docs/plans/               design and implementation notes
-tests/                    behavior + ingestion tests
+docs/plans/               design and implementation notes (gitignored)
+tests/                    behavior, public-boundary and learner tests
 ```
 
 ## Quick start
@@ -30,11 +32,14 @@ tests/                    behavior + ingestion tests
 ```bash
 uv sync
 cp .env.example .env   # add GROQ_API_KEY
-uv run bot.py
+npm --prefix frontend ci
+npm --prefix frontend run build:learner
+uv run end_user_app.py -t webrtc --host 127.0.0.1 --port 7861
 ```
 
-Open http://localhost:7860 and click **Connect**. First run takes ~20s while
-models/SDKs warm up.
+Open http://localhost:7861/learn/. The first run takes ~20s while models/SDKs
+warm up. `uv run bot.py` remains available for developer and telephony runs,
+but the learner UI is served only by `end_user_app.py`.
 
 ## Ingest a course
 
@@ -56,18 +61,20 @@ Optional upload UI:
 uv run --extra ingest streamlit run src/eklavya/ingest/streamlit_app.py
 ```
 
-## Behavior sensing
+## Behavior sensing backend
 
-The H5 engagement model runs in a separate Python 3.13 process while the voice
-bot runs on 3.12. Create its venv once:
+The optional H5 engagement model and behavior monitor remain available to
+developer runs. The learner website does not request a camera and never feeds
+the monitor. Create the Python 3.13 venv once:
 
 ```bash
 uv venv --python 3.13 vision/.venv-h5
 uv pip install --python vision/.venv-h5/bin/python -r vision/requirements-h5.txt
 ```
 
-Start the bot normally, open the client, and turn on the **Camera** toggle in
-the Bot Video header. Camera permission requires `localhost` or HTTPS.
+Start a developer bot normally if you are working on the behavior backend. The
+behavior websocket remains backend-only; no browser UI in this repository
+sends camera frames.
 
 Absolute thresholds: Engagement ≤40%, Boredom ≥60%, Confusion ≥65%, or
 Frustration ≥65% after a smoothed breach lasting five seconds. A 60-second
@@ -83,17 +90,6 @@ CV_MODEL_PATH=/absolute/path/to/vision/daisee_engagement_model_final.h5
 CV_CAMERA_INDEX=0
 ```
 
-## Client UI
-
-`client/` is a checked-in build of the prebuilt Pipecat UI, customized with the
-avatar overlay. To rebuild the overlay after changing `frontend/`:
-
-```bash
-cd frontend
-npm ci
-npm run build:overlay   # writes avatar-overlay.js + models into ../client
-```
-
 ## Transports
 
 | Transport | Command | Needs |
@@ -103,8 +99,8 @@ npm run build:overlay   # writes avatar-overlay.js + models into ../client
 | Twilio | `uv run bot.py -t twilio -x your.ngrok.io` | Twilio keys |
 | WebSocket | `uv run bot.py -t websocket` | `pipecat-ai[websocket]` |
 
-The prebuilt client UI is served at `/client` (root URL redirects/connects for
-WebRTC).
+The supported browser UI is the learner at `/learn/`, served by
+`end_user_app.py`. The developer entrypoint is for backend and telephony work.
 
 ## Twilio outbound calls
 
