@@ -37,3 +37,22 @@ and the markup changes, update `PANEL_TITLE`/selectors in `src/overlay/main.ts`.
 - Viseme sync is decent but untuned; framing is head-and-torso.
 - Debug helpers: `window.__avatarDebug` (per-frame viseme/volume/state),
   `window.__avatarLipsync`, `window.__botStream`.
+
+## Isolated learner app
+
+`learner/` is the React learner; `src/overlay/` remains the independent developer overlay. Use Node 22.14+ in the Node 22 line.
+
+```bash
+npm ci
+npm run dev:learner
+npm run test:learner
+npm run typecheck:learner
+npm run typecheck
+npm run build:learner
+```
+
+The learner Vite root is `learner/`, base `/learn/`, public directory `public/`, and absolute output `../end-user-client/`. Never point its output at `../client/`. Models/favicon are copied by Vite; the build’s copy-assets script copies DRACO decoder files from the exact installed Three package. No CDN or overlay globals are required at runtime.
+
+The official Pipecat client is owned once for the page lifetime. `session.ts` is the only SDK callback adapter. `BotAudioController` owns the audible player and single Lipsync analysis context; Avatar and spectrum share it. Do not add `PipecatClientAudio`, a microphone analyser, random bars, a webcam control or per-frame React state.
+
+Vitest/jsdom tests use fakes and prove no real browser media behavior. Real Chrome/Safari media, autoplay, device output, GLB idle/blink/morph, ICE/TURN and accessibility checks must be recorded separately. Existing `build:overlay` and `typecheck` commands remain unchanged.

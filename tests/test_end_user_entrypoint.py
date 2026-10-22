@@ -86,3 +86,32 @@ def test_public_main_launches_the_actual_outer_boundary(learner, monkeypatch):
     assert boundary.app is app
     assert boundary.sessions is app.state.public_sessions
     assert options["workers"] == 1 and options["access_log"] is False
+
+def test_public_asset_and_header_boundary(public_factory):
+    import asyncio
+    import httpx
+
+    async def scenario():
+        manager, boundary, clock = public_factory()
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(boundary), base_url="http://localhost:7861") as client:
+            page = await client.get("/learn/")
+            assert page.status_code == 200
+            assert 'name="eklavya-mode" content="public"' in page.text
+            assert "camera=()" in page.headers["permissions-policy"]
+            assert "frame-ancestors 'none'" in page.headers["content-security-policy"]
+            assert page.headers["x-content-type-options"] == "nosniff"
+            assert (await client.get("/learn/test.js")).status_code == 200
+            for path in ["/.env", "/learn/.env", "/learn/missing.js", "/learn/source.map",
+                         "/src/eklavya/app.py", "/docs", "/client/", "/behavior/ws", "/files"]:
+                assert (await client.get(path)).status_code == 404
+            start = await client.post("/session/start", json={}, headers={"Origin": "http://localhost:7861"})
+            assert start.status_code == 200
+            assert start.headers["cache-control"] == "no-store"
+            assert "HttpOnly" in start.headers["set-cookie"]
+            assert "SameSite=strict" in start.headers["set-cookie"]
+            assert "Domain=" not in start.headers["set-cookie"]
+            assert not (await client.options("/api/offer", headers={
+                "Origin": "http://localhost:7861", "Access-Control-Request-Method": "POST",
+            })).is_success
+        await manager.shutdown()
+    asyncio.run(scenario())

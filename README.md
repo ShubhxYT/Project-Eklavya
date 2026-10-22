@@ -162,3 +162,54 @@ use TURN as well if clients must work from restrictive networks.
 
 - Pipecat quickstart: https://docs.pipecat.ai/pipecat/get-started/quickstart
 - Pipecat examples: https://github.com/pipecat-ai/pipecat/tree/main/examples/getting-started
+
+## Learner website (separate from the developer console)
+
+The learner is a React/TypeScript/Vite static build at `/learn/`, backed by the existing Python/Pipecat tutor. It supports microphone conversation, typed questions, captions, the animated avatar and a spectrum of actual tutor audio. It uses no webcam or attention worker. Typed questions still use the configured voice-response pipeline; a microphone-free connection is not promised.
+
+### Build and run locally
+
+Use Python 3.12, uv, and Node 22.14+ (Node 22 line). After dependencies have been locked, install with:
+
+```bash
+npm --prefix frontend ci
+npm --prefix frontend run typecheck:learner
+npm --prefix frontend run build:learner
+uv run end_user_app.py -t webrtc --host 127.0.0.1 --port 7861
+```
+
+Open `http://localhost:7861/learn/`. Start grants microphone access only; Resume Audio recovers browser autoplay blocking. End clears the unsaved tab transcript and releases the microphone. A new lease is a new conversation, not restored server memory.
+
+For local UI iteration, run `npm --prefix frontend run dev:learner` in a second terminal and use its printed `/learn/` URL. Its signaling proxy defaults to `http://127.0.0.1:7861`; `LEARNER_BACKEND_URL` changes that build-process setting. Never use the Vite development server as the public deployment.
+
+The unchanged developer command remains `uv run bot.py` (default local port 7860). Do not run both entrypoints on the same port. The developer console and vision code are retained, not exposed as learner features.
+
+### Existing backend prerequisites
+
+Provider keys stay in the backend environment, never JS, `VITE_*`, URLs or public errors. The backend still requires the existing ingested `DATA_DIR/okf` corpus, a valid `COURSE_ID` when configured, Silero/local turn dependencies, and reachability to the configured Groq STT/LLM and Voicebox TTS services. The default Voicebox address is private-network-local and is not proof of deployment reachability. The image excludes `data/`; mount the approved corpus read-only. Do not log course text, transcripts or keys while diagnosing failures.
+
+### Public deployment (release gated)
+
+Do not publish the local runner command. Public delivery requires the approved lease-owned signaling adapter and passing attachment/security/browser acceptance in `docs/end-user-smoke-checks.md`.
+
+Build `end-user-client/` before `docker build`; the Dockerfile intentionally checks for its index, models and DRACO decoder. The default image command stays the developer command. Supply this learner command override through the deployment platform:
+
+```text
+uv run end_user_app.py -t webrtc --host 0.0.0.0 --port 7861 --public --public-origin https://YOUR_ACTUAL_HOST
+```
+
+`YOUR_ACTUAL_HOST` is the exact release origin configured by the operator, not a literal example hostname to deploy. There is no Node production server. Serve static files and signaling through the same HTTPS origin; do not serve the repository root.
+
+Reverse proxy requirements:
+- Terminate valid HTTPS, preserve the exact Host and browser Origin, and route `/`, `/learn/`, `/healthz`, and owned `/session/*` requests to the learner backend.
+- Limit request bodies to 256KiB and configure finite timeouts. Preserve POST/PATCH bodies and CSRF headers. No generic fallback to the developer console.
+- Make the backend unreachable directly from the Internet. Set `FORWARDED_ALLOW_IPS` to only the actual trusted proxy IPs; never `*`. Do not trust arbitrary forwarded address headers.
+- Configure matched ICE on both peers using server-side `PIPECAT_ICE_SERVERS` JSON. The bootstrap returns the same intended browser ICE configuration. Use short-lived TURN credentials for restrictive/NATed networks; TURN configuration is deliberately browser-visible and is not a provider API key.
+- Verify real external-network media and TURN relay. HTTPS and an HTTP health check alone do not establish WebRTC reachability. TURN must be reachable from the browser and backend, with required UDP/TCP/TLS ports allowed.
+- Run exactly one process/replica. `WEB_CONCURRENCY=1`; no replicas sharing an origin while relying on these in-memory ownership maps.
+
+Anonymous launch defaults are conservative recommendations, not measured capacity: one reserved/active conversation, 30s reservation, 60s setup, 15min maximum lease age, 120s meaningful-user idle, 30 turns, 300 outbound provider attempts per lease and 6,000 attempts globally per rolling day. Start/RTVI/signaling limits also apply. `EKLAVYA_PUBLIC_ENABLED=0` disables admissions; stopping active leases requires graceful shutdown. Counters reset on restart, do not coordinate replicas and do not cap currency spend. Anyone—including automation—can consume allowed anonymous capacity; ownership cookies are not accounts or anti-abuse guarantees.
+
+Only enumerated learner assets and owned session endpoints are public. Raw signaling, developer console, behavior/WebSocket, files, docs, metrics and diagnostics are denied. Provider/dependency logs are suppressed in public mode; only add fixed, reviewed event names if operational logging is needed. No raw errors, transcripts, SDP, capabilities or provider payloads belong in logs.
+
+The visible transcript is unsaved in this tab. This does not establish provider retention, network privacy beyond HTTPS, or an application-wide data-retention guarantee. Generated cited text may differ from clean spoken text; interrupted replies are not represented as fully heard. No full-history reasoning, persistent memory or word-perfect caption timing is promised.
