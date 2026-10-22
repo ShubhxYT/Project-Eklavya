@@ -116,7 +116,12 @@ def require_env(name: str) -> str:
     return value
 
 
-async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
+async def run_bot(
+    transport: BaseTransport,
+    runner_args: RunnerArguments,
+    *,
+    enable_behavior_monitor: bool = True,
+):
     logger.info("Starting bot")
 
     # ------------------------------------------------------------------
@@ -211,9 +216,13 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
     async def on_behavior_recovery() -> None:
         await worker.queue_frames([BehaviorRecoveryFrame()])
 
-    behavior_monitor = BehaviorMonitor(
-        on_intervention=on_behavior_intervention,
-        on_recovery=on_behavior_recovery,
+    behavior_monitor = (
+        BehaviorMonitor(
+            on_intervention=on_behavior_intervention,
+            on_recovery=on_behavior_recovery,
+        )
+        if enable_behavior_monitor
+        else None
     )
 
     runner = WorkerRunner(handle_sigint=runner_args.handle_sigint)
@@ -224,11 +233,12 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
     async def on_client_connected(transport, client):
         global active_behavior_monitor
         logger.info("Client connected")
-        active_behavior_monitor = behavior_monitor
-        if await behavior_monitor.start():
-            logger.info("CV monitor started; waiting for browser camera frames")
-        else:
-            logger.warning("CV camera monitor could not be started; voice chat continues")
+        if behavior_monitor is not None:
+            active_behavior_monitor = behavior_monitor
+            if await behavior_monitor.start():
+                logger.info("CV monitor started; waiting for browser camera frames")
+            else:
+                logger.warning("CV camera monitor could not be started; voice chat continues")
         # Kick off the conversation.
         context.add_message(
             {"role": "system", "content": "Please introduce yourself to the user."}
@@ -239,18 +249,20 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
     async def on_client_disconnected(transport, client):
         global active_behavior_monitor
         logger.info("Client disconnected")
-        if active_behavior_monitor is behavior_monitor:
-            active_behavior_monitor = None
-        await behavior_monitor.stop()
+        if behavior_monitor is not None:
+            if active_behavior_monitor is behavior_monitor:
+                active_behavior_monitor = None
+            await behavior_monitor.stop()
         await runner.cancel()
 
     try:
         await runner.run()
     finally:
-        await behavior_monitor.stop()
+        if behavior_monitor is not None:
+            await behavior_monitor.stop()
 
 
-async def bot(runner_args: RunnerArguments):
+async def bot(runner_args: RunnerArguments, *, enable_behavior_monitor: bool = True):
     """Main bot entry point (compatible with the Pipecat dev runner and
     Pipecat Cloud)."""
     # Pipecat's default Twilio serializer enables REST-based auto hang-up,
@@ -290,7 +302,11 @@ async def bot(runner_args: RunnerArguments):
     else:
         transport = await create_transport(runner_args, transport_params)
 
-    await run_bot(transport, runner_args)
+    await run_bot(
+        transport,
+        runner_args,
+        enable_behavior_monitor=enable_behavior_monitor,
+    )
 
 
 # Serve our own branded copy of the prebuilt client UI. Registered before
