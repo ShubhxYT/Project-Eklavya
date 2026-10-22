@@ -67,3 +67,22 @@ def test_main_exports_delegator_and_uses_runner(learner, monkeypatch):
     module.main()
     assert len(calls) == 1
     assert callable(module.bot)
+
+def test_public_main_launches_the_actual_outer_boundary(learner, monkeypatch):
+    import uvicorn
+    from eklavya.public_sessions import PublicBoundary
+    module, app, core = learner
+    launched = []
+    monkeypatch.setattr(sys, "argv", ["end_user_app.py", "--public", "--public-origin", "http://localhost:7861"])
+    monkeypatch.setenv("WEB_CONCURRENCY", "1")
+    monkeypatch.setenv("PIPECAT_ICE_SERVERS", "[]")
+    monkeypatch.setattr(uvicorn, "run", lambda application, **kwargs: launched.append((application, kwargs)))
+    # Preserve test-process logging; logging suppression is checked in isolation below.
+    monkeypatch.setattr("eklavya.public_sessions.install_safe_logging", lambda: None)
+    module.main()
+    assert len(launched) == 1
+    boundary, options = launched[0]
+    assert isinstance(boundary, PublicBoundary)
+    assert boundary.app is app
+    assert boundary.sessions is app.state.public_sessions
+    assert options["workers"] == 1 and options["access_log"] is False

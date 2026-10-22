@@ -16,6 +16,8 @@
 # `uv add "pipecat-ai[xxx]"` command), and replace the service constructors
 # below. Examples are in the comments.
 
+from __future__ import annotations
+
 import asyncio
 import importlib.util
 import os
@@ -58,6 +60,11 @@ from eklavya.grounded_tutor import (
 from eklavya.behavior_monitor import BehaviorIntervention, BehaviorMonitor
 from eklavya.drona.knowledge.catalog import FileCatalog
 from eklavya.drona.services.groq_tutor import GroqTutor
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from eklavya.public_sessions import PublicSessionPolicy
 
 load_dotenv(override=True)
 
@@ -121,8 +128,30 @@ async def run_bot(
     runner_args: RunnerArguments,
     *,
     enable_behavior_monitor: bool = True,
+    session_policy: PublicSessionPolicy | None = None,
 ):
     logger.info("Starting bot")
+
+    public_worker_options = {}
+    stt_options = {}
+    tts_options = {}
+    grounded_type = GroundedTutorProcessor
+    grounded_options = {}
+    if session_policy is not None:
+        from eklavya.public_sessions import (
+            PublicGroundedTutorProcessor,
+            PublicRTVIProcessor,
+            public_observer_params,
+        )
+        session_policy.ensure_live()
+        stt_options["http_client"] = session_policy.http_client("stt")
+        tts_options["http_client"] = session_policy.http_client("tts")
+        public_worker_options = {
+            "rtvi_processor": PublicRTVIProcessor(session_policy),
+            "rtvi_observer_params": public_observer_params(),
+        }
+        grounded_type = PublicGroundedTutorProcessor
+        grounded_options["policy"] = session_policy
 
     # ------------------------------------------------------------------
     # AI services — pick the STT/LLM/TTS providers you want.
@@ -135,6 +164,7 @@ async def run_bot(
     stt = GroqSTTService(
         api_key=require_env("GROQ_API_KEY"),
         settings=GroqSTTService.Settings(model="whisper-large-v3-turbo"),
+        **stt_options,
     )
 
     # Grounded tutor — answers questions ONLY from the ingested course material.
@@ -155,7 +185,8 @@ async def run_bot(
         raise RuntimeError(f"COURSE_ID {course_id!r} not found. Available: {', '.join(courses)}")
 
     tutor = GroqTutor(
-        httpx.AsyncClient(timeout=httpx.Timeout(45.0, connect=5.0)),
+        (session_policy.http_client("tutor") if session_policy is not None else
+         httpx.AsyncClient(timeout=httpx.Timeout(45.0, connect=5.0))),
         require_env("GROQ_API_KEY"),
         os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1"),
         os.getenv("GROQ_MODEL", "openai/gpt-oss-120b"),
@@ -170,6 +201,7 @@ async def run_bot(
         base_url=os.getenv("VOICEBOX_URL", "http://192.168.29.102:17600"),
         profile=os.getenv("VOICEBOX_PROFILE", "HF Female"),
         engine=os.getenv("VOICEBOX_ENGINE", "kokoro"),
+        **tts_options,
     )
 
     # Conversation context (multi-turn memory)
@@ -180,7 +212,9 @@ async def run_bot(
     )
 
     # Grounded tutor replaces the LLM service in the pipeline.
-    grounded = GroundedTutorProcessor(catalog=catalog, tutor=tutor, course_id=course_id)
+    grounded = grounded_type(
+        catalog=catalog, tutor=tutor, course_id=course_id, **grounded_options,
+    )
 
     # Pipeline: audio in -> STT -> user context -> grounded tutor -> TTS -> audio out
     pipeline = Pipeline(
@@ -197,13 +231,14 @@ async def run_bot(
 
     worker = PipelineWorker(
         pipeline,
-        params=PipelineParams(
-            enable_metrics=True,
-            enable_usage_metrics=True,
-        ),
-        idle_timeout_secs=runner_args.pipeline_idle_timeout_secs,
+        params=PipelineParams(enable_metrics=True, enable_usage_metrics=True),
+        idle_timeout_secs=(None if session_policy is not None else runner_args.pipeline_idle_timeout_secs),
         processor_unusable_policy=ProcessorUnusablePolicy.END,
+        **public_worker_options,
     )
+
+    if session_policy is not None:
+        session_policy.register_worker(worker, runner_args.webrtc_connection)
 
     intervention_lock = asyncio.Lock()
 
@@ -240,6 +275,8 @@ async def run_bot(
             else:
                 logger.warning("CV camera monitor could not be started; voice chat continues")
         # Kick off the conversation.
+        if session_policy is not None and session_policy.ready_at is not None:
+            return
         context.add_message(
             {"role": "system", "content": "Please introduce yourself to the user."}
         )
@@ -249,6 +286,8 @@ async def run_bot(
     async def on_client_disconnected(transport, client):
         global active_behavior_monitor
         logger.info("Client disconnected")
+        if session_policy is not None and session_policy.restarting and not session_policy.closing:
+            return
         if behavior_monitor is not None:
             if active_behavior_monitor is behavior_monitor:
                 active_behavior_monitor = None
@@ -262,9 +301,18 @@ async def run_bot(
             await behavior_monitor.stop()
 
 
-async def bot(runner_args: RunnerArguments, *, enable_behavior_monitor: bool = True):
+async def bot(
+    runner_args: RunnerArguments,
+    *,
+    enable_behavior_monitor: bool = True,
+    session_policy: PublicSessionPolicy | None = None,
+):
     """Main bot entry point (compatible with the Pipecat dev runner and
     Pipecat Cloud)."""
+    if session_policy is not None:
+        session_policy.ensure_live()
+        if enable_behavior_monitor:
+            raise RuntimeError("Public learner monitoring must be disabled")
     # Pipecat's default Twilio serializer enables REST-based auto hang-up,
     # which requires an Account SID and Auth Token even though Media Streams
     # themselves do not. For local/demo calls, let Twilio close the stream when
@@ -306,6 +354,7 @@ async def bot(runner_args: RunnerArguments, *, enable_behavior_monitor: bool = T
         transport,
         runner_args,
         enable_behavior_monitor=enable_behavior_monitor,
+        session_policy=session_policy,
     )
 
 
