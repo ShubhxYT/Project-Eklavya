@@ -127,7 +127,7 @@ export class Lipsync {
   // host UI's own element). Analyser is tap-only (no destination).
   // https://issues.chromium.org/issues/40094084
   connectStream(stream: MediaStream) {
-    this.audioContext.resume();
+    void this.audioContext.resume().catch(() => undefined);
     this.history = [];
     this.features = null;
     this.state = FSMStates.silence;
@@ -150,7 +150,41 @@ export class Lipsync {
     this.hiddenAudio.srcObject = stream;
     this.hiddenAudio.play().catch(() => {});
     this.streamSource = this.audioContext.createMediaStreamSource(stream);
+    this.analyser.channelCount = 1;
+    this.analyser.channelCountMode = "explicit";
+    this.analyser.channelInterpretation = "speakers";
     this.streamSource.connect(this.analyser);
+  }
+
+  getAnalyser(): AnalyserNode {
+    return this.analyser;
+  }
+
+  neutralize(): void {
+    this.history = [];
+    this.features = null;
+    this.state = FSMStates.silence;
+    this.viseme = VISEMES.sil;
+  }
+
+  disconnectStream(): void {
+    this.streamSource?.disconnect();
+    this.streamSource = undefined;
+    if (this.hiddenAudio) {
+      this.hiddenAudio.pause();
+      this.hiddenAudio.srcObject = null;
+      this.hiddenAudio.muted = true;
+    }
+    this.stream = null;
+    this.neutralize();
+  }
+
+  async dispose(): Promise<void> {
+    this.disconnectStream();
+    this.hiddenAudio?.remove();
+    this.hiddenAudio = null;
+    this.analyser.disconnect();
+    if (this.audioContext.state !== "closed") await this.audioContext.close();
   }
 
   extractFeatures() {

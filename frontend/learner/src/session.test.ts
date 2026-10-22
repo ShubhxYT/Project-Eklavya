@@ -57,3 +57,47 @@ describe("session adapter", () => {
     await session.dispose();
   });
 });
+
+it("settles pending Start on End and stops late local capture", async () => {
+  const audio = { resume: vi.fn(), detach: vi.fn(), dispose: vi.fn() } as unknown as BotAudioController;
+  sdk.connect.mockImplementation(() => new Promise(() => {}));
+  const events: any[] = [];
+  const session = createLearnerSession({ mode: "local", audio, onEvent: (event) => events.push(event) });
+  const pending = session.start();
+  await Promise.resolve(); await Promise.resolve();
+  await session.end(); await pending;
+  const track = { kind: "audio", stop: vi.fn() };
+  sdk.options.callbacks.onTrackStarted(track, { local: true });
+  sdk.options.callbacks.onBotReady({ version: "2.1.0" });
+  expect(track.stop).toHaveBeenCalledOnce();
+  expect(events.filter((event) => event.type === "phase" && event.phase === "ready")).toHaveLength(0);
+  await session.dispose();
+});
+
+it("reuses a live public lease but resets when explicitly starting a new one", async () => {
+  let leases = 0;
+  const fetcher = vi.fn(async (url: string) => {
+    if (url === "/session/start") {
+      const sessionId = (++leases).toString(16).padStart(32, "0");
+      return new Response(JSON.stringify({ sessionId, csrf: "safe-fake-nonce", expiresAt: 900000,
+        webrtcRequestParams: { endpoint: `/session/${sessionId}/offer` } }), { status: 200 });
+    }
+    return new Response("{}", { status: 200 });
+  });
+  vi.stubGlobal("fetch", fetcher);
+  sdk.connect.mockImplementation(async () => { sdk.options.callbacks.onBotReady({ version: "2.1.0" }); });
+  const events: any[] = [];
+  const audio = { resume: vi.fn(), detach: vi.fn(), dispose: vi.fn() } as unknown as BotAudioController;
+  const session = createLearnerSession({ mode: "public", audio, onEvent: (event) => events.push(event) });
+  try {
+    await session.start(); await session.start();
+    sdk.options.callbacks.onDisconnected();
+    sdk.options.callbacks.onBotReady({ version: "2.1.0" });
+    expect(leases).toBe(1);
+    expect(events.filter((event) => event.type === "reset")).toHaveLength(1);
+    await session.end(); await session.start();
+    expect(leases).toBe(2);
+    expect(events.filter((event) => event.type === "reset")).toHaveLength(2);
+    await session.dispose();
+  } finally { vi.unstubAllGlobals(); }
+});
