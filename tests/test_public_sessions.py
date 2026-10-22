@@ -143,3 +143,36 @@ def test_global_provider_budget_disables_admission_before_send(public_factory):
         assert manager.enabled is False
         await manager.shutdown()
     asyncio.run(scenario())
+
+
+def test_end_is_idempotent_for_a_closing_lease(public_factory):
+    import httpx
+
+    async def scenario():
+        manager, boundary, clock = public_factory()
+        origin = "http://localhost:7861"
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(boundary), base_url=origin
+        ) as client:
+            start = await client.post("/session/start", json={}, headers={"Origin": origin})
+            assert start.status_code == 200
+            value = start.json()
+            lease = manager.leases[value["sessionId"]]
+
+            # The peer teardown won the race and marked the lease closing.
+            lease.closing = True
+            headers = {"Origin": origin, "X-Eklavya-CSRF": value["csrf"]}
+            ended = await client.post(f"/session/{lease.session_id}/end", json={}, headers=headers)
+            assert ended.status_code == 200
+            assert ended.json() == {"status": "ended"}
+
+            # Ownership still matters: a bad CSRF must not become a successful end.
+            wrong = await client.post(
+                f"/session/{lease.session_id}/end",
+                json={},
+                headers={"Origin": origin, "X-Eklavya-CSRF": "wrong"},
+            )
+            assert wrong.status_code == 404
+        await manager.shutdown()
+
+    asyncio.run(scenario())

@@ -316,11 +316,13 @@ class PublicSessions:
             self.leases[session_id] = lease
             return lease, token, csrf
 
-    def owned(self, session_id, owner_token, csrf):
+    def owned(self, session_id, owner_token, csrf, *, allow_ended=False):
         lease = self.leases.get(session_id)
         if (lease is None or not isinstance(owner_token, str) or not isinstance(csrf, str) or
                 not equal(lease.owner, digest(owner_token)) or not equal(lease.csrf, digest(csrf))):
             raise PublicLimit("not_found", 404)
+        if allow_ended and (lease.closing or lease.closed):
+            return lease
         lease.ensure_live()
         return lease
 
@@ -570,7 +572,10 @@ class PublicBoundary:
             response.set_cookie(config.cookie, token, httponly=True, secure=config.origin.startswith("https:"),
                                 samesite="strict", path="/", max_age=900)
             return response
-        lease = self.sessions.owned(match[1], owner, headers.get("x-eklavya-csrf"))
+        lease = self.sessions.owned(
+            match[1], owner, headers.get("x-eklavya-csrf"),
+            allow_ended=(match[2] == "end"),
+        )
         if match[2] == "end":
             if data:
                 raise PublicLimit("invalid", 400)

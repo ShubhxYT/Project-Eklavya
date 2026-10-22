@@ -101,3 +101,36 @@ it("reuses a live public lease but resets when explicitly starting a new one", a
     await session.dispose();
   } finally { vi.unstubAllGlobals(); }
 });
+
+it("releases the public lease before disconnecting the peer", async () => {
+  let releaseEnd!: () => void;
+  const order: string[] = [];
+  const sessionId = "a".repeat(32);
+  const fetcher = vi.fn(async (url: string) => {
+    if (url === "/session/start") {
+      return new Response(JSON.stringify({ sessionId, csrf: "safe-fake-nonce", expiresAt: 900000,
+        webrtcRequestParams: { endpoint: `/session/${sessionId}/offer` } }), { status: 200 });
+    }
+    if (url.endsWith("/end")) {
+      order.push("end");
+      await new Promise<void>((resolve) => { releaseEnd = resolve; });
+      return new Response("{}", { status: 200 });
+    }
+    return new Response("{}", { status: 200 });
+  });
+  vi.stubGlobal("fetch", fetcher);
+  sdk.connect.mockImplementation(async () => { sdk.options.callbacks.onBotReady({ version: "2.1.0" }); });
+  sdk.disconnect.mockImplementation(async () => { order.push("disconnect"); });
+  const audio = { resume: vi.fn(), detach: vi.fn(), dispose: vi.fn() } as unknown as BotAudioController;
+  const session = createLearnerSession({ mode: "public", audio, onEvent: () => {} });
+  try {
+    await session.start();
+    const ending = session.end();
+    await Promise.resolve();
+    expect(order).toEqual(["end"]);
+    releaseEnd();
+    await ending;
+    expect(order).toEqual(["end", "disconnect"]);
+    await session.dispose();
+  } finally { vi.unstubAllGlobals(); }
+});

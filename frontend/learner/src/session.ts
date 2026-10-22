@@ -191,8 +191,10 @@ export function createLearnerSession({ mode, audio, onEvent }: {
     const local = client.tracks().local;
     local.audio?.stop(); local.video?.stop();
     audio.detach(); emit({ type: "clear" });
-    stopping = Promise.allSettled([releaseLease(current), client.disconnect()])
-      .then(() => undefined).finally(() => { stopping = undefined; });
+    stopping = (async () => {
+      await releaseLease(current);
+      await Promise.allSettled([client.disconnect()]);
+    })().then(() => undefined).finally(() => { stopping = undefined; });
     return stopping;
   }
   return session;
